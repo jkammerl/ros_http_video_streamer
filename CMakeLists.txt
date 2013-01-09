@@ -73,7 +73,7 @@ rosbuild_link_boost(${PROJECT_NAME} thread signals system)
 
                                          
 #common commands for building c++ executables and libraries 
-rosbuild_add_executable(webGLPointCloudTopicConverter tools/depth_to_webGL_pointclouds.cpp)                                       
-rosbuild_link_boost(webGLPointCloudTopicConverter thread signals system)       
+rosbuild_add_executable(webGL_pointcloud_image_encoder tools/depth_to_webGL_pointclouds.cpp)                                       
+rosbuild_link_boost(webGL_pointcloud_image_encoder thread signals system)       
 
     
