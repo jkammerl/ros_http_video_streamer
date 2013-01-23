@@ -87,6 +87,8 @@ struct mime_map
   { "html", "text/html" },
   { "jpg", "image/jpeg" },
   { "png", "image/png" },
+  { "css", "text/css" },
+  { "js", "text/javascript" },
   { 0, 0 } // Marks end of list.
 };
 
@@ -103,8 +105,7 @@ connection::connection(boost::asio::io_service& io_service,
     reply_(),
     encoder_manager_(encoder_manager),
     streaming_thread_(),
-    do_streaming_(false),
-    doc_root_("./www/")
+    do_streaming_(false)
 {
 }
 
@@ -124,6 +125,8 @@ void connection::sendHTTPStreamingHeaders()
 
   buffers.push_back(boost::asio::buffer(misc_strings::ok));
 
+#ifdef HTTP_HEADERS
+
   buffers.push_back(boost::asio::buffer("Date"));
   buffers.push_back(boost::asio::buffer(misc_strings::name_value_separator));
 
@@ -131,7 +134,7 @@ void connection::sendHTTPStreamingHeaders()
   boost::posix_time::time_facet * p_time_output = new boost::posix_time::time_facet;
   std::locale special_locale (std::locale(""), p_time_output);
   datetime_ss.imbue (special_locale);
-  (*p_time_output).format("%a, %d %b %Y %H:%M:%S %z"); // date time
+  (*p_time_output).format("%a, %d %b %Y %H:%M:%S%F %z"); // date time
   datetime_ss << boost::posix_time::second_clock::local_time();
 
   buffers.push_back(boost::asio::buffer(datetime_ss.str().c_str()));
@@ -139,8 +142,9 @@ void connection::sendHTTPStreamingHeaders()
 
   buffers.push_back(boost::asio::buffer("Content-Type"));
   buffers.push_back(boost::asio::buffer(misc_strings::name_value_separator));
-  buffers.push_back(boost::asio::buffer("video/webm; codecs=\"vp8.0, vorbis\""));
+  buffers.push_back(boost::asio::buffer("video/webm"));
   buffers.push_back(boost::asio::buffer(misc_strings::crlf));
+
 
   buffers.push_back(boost::asio::buffer("Cache-Control"));
   buffers.push_back(boost::asio::buffer(misc_strings::name_value_separator));
@@ -171,18 +175,20 @@ void connection::sendHTTPStreamingHeaders()
   buffers.push_back(boost::asio::buffer(misc_strings::name_value_separator));
   buffers.push_back(boost::asio::buffer("0"));
   buffers.push_back(boost::asio::buffer(misc_strings::crlf));
-/*
+
   buffers.push_back(boost::asio::buffer("Trailer"));
   buffers.push_back(boost::asio::buffer(misc_strings::name_value_separator));
   buffers.push_back(boost::asio::buffer("Expires"));
   buffers.push_back(boost::asio::buffer(misc_strings::crlf));
-*/
 
-#ifdef HTTP_TRANSFER_ENCODING
-  buffers.push_back(boost::asio::buffer("Transfer-Encoding"));
-  buffers.push_back(boost::asio::buffer(misc_strings::name_value_separator));
-  buffers.push_back(boost::asio::buffer("chunked"));
-  buffers.push_back(boost::asio::buffer(misc_strings::crlf));
+
+  #ifdef HTTP_TRANSFER_ENCODING
+    buffers.push_back(boost::asio::buffer("Transfer-Encoding"));
+    buffers.push_back(boost::asio::buffer(misc_strings::name_value_separator));
+    buffers.push_back(boost::asio::buffer("chunked"));
+    buffers.push_back(boost::asio::buffer(misc_strings::crlf));
+  #endif
+
 #endif
 
   buffers.push_back(boost::asio::buffer(misc_strings::crlf));
@@ -462,7 +468,7 @@ void connection::handleRead(const boost::system::error_code& e,
 
     if (result)
     {
-      ROS_INFO("Http request received from %s: %s", remote_ip.c_str(), request_.uri.c_str());
+      ROS_DEBUG("Http request received from %s: %s", remote_ip.c_str(), request_.uri.c_str());
 
       std::string request_path;
       // update list of available image topics
@@ -550,11 +556,12 @@ void connection::handleRead(const boost::system::error_code& e,
         }
 
         // Open the file to send back.
-        std::string full_path = doc_root_ + request_path;
+        std::string full_path = server_conf_.wwwroot_ + request_path;
         std::ifstream is(full_path.c_str(), std::ios::in | std::ios::binary);
         if (!is)
         {
           reply_ = reply::stock_reply(reply::not_found);
+          ROS_INFO("Http request from client %s: %s - file not found ", remote_ip.c_str(), request_.uri.c_str(), full_path.c_str());
           return;
         }
 
